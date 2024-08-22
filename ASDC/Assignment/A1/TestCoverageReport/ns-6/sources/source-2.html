@@ -1,0 +1,263 @@
+
+
+
+<!DOCTYPE html>
+<html id="htmlId">
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=windows-1252"> 
+  <title>Coverage Report > TransactionManagement</title>
+  <style type="text/css">
+    @import "../../css/coverage.css";
+    @import "../../css/idea.min.css";
+  </style>
+  <script type="text/javascript" src="../../js/highlight.min.js"></script>
+  <script type="text/javascript" src="../../js/highlightjs-line-numbers.min.js"></script>
+</head>
+
+<body>
+<div class="content">
+<div class="breadCrumbs">
+Current scope:     <a href="../../index.html">all classes</a>
+    <span class="separator">|</span>
+    <a href="../index.html">Services</a>
+</div>
+
+<h1>Coverage Summary for Class: TransactionManagement (Services)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">TransactionManagement</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (1/1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (5/5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (79/79)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<pre>
+<code class="sourceCode" id="sourceCode">&nbsp;package Services;
+&nbsp;
+&nbsp;import Dao.*;
+&nbsp;import Log.LogWriter;
+&nbsp;import Log.TxtLogWriter;
+&nbsp;import Repositories.*;
+&nbsp;
+&nbsp;import java.time.LocalDate;
+&nbsp;import java.time.temporal.ChronoUnit;
+&nbsp;
+&nbsp;public class TransactionManagement {
+&nbsp;
+&nbsp;    private UserRepo userRepo;
+&nbsp;    private BookRepo bookRepo;
+&nbsp;    private LogWriter logWriter;
+&nbsp;    private TransactionRepo transactionRepo;
+&nbsp;
+<b class="fc">&nbsp;    public TransactionManagement(UserRepo userRepo, BookRepo bookRepo, TransactionRepo transactionRepo){</b>
+<b class="fc">&nbsp;        this.userRepo = userRepo;</b>
+<b class="fc">&nbsp;        this.bookRepo = bookRepo;</b>
+<b class="fc">&nbsp;        this.transactionRepo = transactionRepo;</b>
+<b class="fc">&nbsp;        logWriter = TxtLogWriter.getInstance();</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    public boolean checkoutBook(String userId, String bookTitle) {
+&nbsp;
+<b class="fc">&nbsp;        if (validateUserAndBook(userId, bookTitle)) {</b>
+&nbsp;
+<b class="fc">&nbsp;            Transaction transaction = new Transaction();</b>
+<b class="fc">&nbsp;            transaction.setBook(bookRepo.getBook(bookTitle));</b>
+<b class="fc">&nbsp;            transaction.setUser(userRepo.getUser(userId));</b>
+<b class="fc">&nbsp;            transaction.setIssueDate(LocalDate.now());</b>
+<b class="fc">&nbsp;            transaction.setReturnDate(null);</b>
+<b class="fc">&nbsp;            transaction.setExpectedReturnedDate(LocalDate.now().plusDays(7));</b>
+<b class="fc">&nbsp;            transaction.setStatus(&quot;CheckOut&quot;);</b>
+<b class="fc">&nbsp;            transaction.setRenewCount(0);</b>
+<b class="fc">&nbsp;            transaction.setAmount(0);</b>
+<b class="fc">&nbsp;            transaction.setBookReturned(false);</b>
+&nbsp;
+<b class="fc">&nbsp;            if (transactionRepo.createTransaction(transaction)) {</b>
+<b class="fc">&nbsp;                System.out.println(&quot;Book Checkout is successfully performed!&quot;);</b>
+<b class="fc">&nbsp;                logWriter.Write(&quot;Success&quot;, &quot;TransactionManagement&quot;, &quot;Book checked out successfully!&quot;);</b>
+<b class="fc">&nbsp;                return true;</b>
+&nbsp;            } else {
+<b class="fc">&nbsp;                System.out.println(&quot;Something went wrong, Please try again later!&quot;);</b>
+<b class="fc">&nbsp;                transaction.setStatus(&quot;Failed&quot;);</b>
+<b class="fc">&nbsp;                logWriter.Write(&quot;Failure&quot;, &quot;TransactionManagement&quot;, &quot;Failed to check out book!&quot;);</b>
+&nbsp;            }
+&nbsp;        }
+&nbsp;
+<b class="fc">&nbsp;        return false;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    public boolean returnBook(String userId, String bookTitle) {
+&nbsp;
+<b class="fc">&nbsp;        if (validateUserAndBook(userId, bookTitle)) {</b>
+&nbsp;
+<b class="fc">&nbsp;            Transaction transaction = transactionRepo.getTransaction(userId, bookTitle);</b>
+&nbsp;
+<b class="fc">&nbsp;            if (transaction != null) {</b>
+&nbsp;
+<b class="fc">&nbsp;                transaction.setStatus(&quot;Returned&quot;);</b>
+<b class="fc">&nbsp;                transaction.setReturnDate(LocalDate.now());</b>
+&nbsp;
+<b class="fc">&nbsp;                System.out.println(transaction.getExpectedReturnedDate());</b>
+&nbsp;
+<b class="fc">&nbsp;                if (transaction.getExpectedReturnedDate().isBefore(transaction.getReturnDate())){</b>
+<b class="fc">&nbsp;                    long daysLate = ChronoUnit.DAYS.between(transaction.getExpectedReturnedDate(), LocalDate.now());</b>
+<b class="fc">&nbsp;                    int amount = (int)daysLate * 10;</b>
+<b class="fc">&nbsp;                    transaction.setAmount(amount);</b>
+&nbsp;                }
+&nbsp;
+<b class="fc">&nbsp;                transaction.setBookReturned(true);</b>
+&nbsp;
+<b class="fc">&nbsp;                if (transactionRepo.updateTransaction(transaction)) {</b>
+<b class="fc">&nbsp;                    System.out.println(&quot;Book is successfully returned!&quot;);</b>
+<b class="fc">&nbsp;                    logWriter.Write(&quot;Success&quot;, &quot;TransactionManagement&quot;, &quot;Book returned successfully!&quot;);</b>
+<b class="fc">&nbsp;                    return true;</b>
+&nbsp;                } else {
+<b class="fc">&nbsp;                    System.out.println(&quot;Something went wrong, Please try again later!&quot;);</b>
+<b class="fc">&nbsp;                    logWriter.Write(&quot;Failure&quot;, &quot;TransactionManagement&quot;, &quot;Failed to return book!&quot;);</b>
+&nbsp;                }
+&nbsp;            }
+&nbsp;            else {
+<b class="fc">&nbsp;                System.out.println(&quot;Data Not Found!&quot;);</b>
+&nbsp;            }
+&nbsp;        }
+<b class="fc">&nbsp;        return false;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;
+&nbsp;    public boolean renewBook(String userId, String bookTitle) {
+&nbsp;
+<b class="fc">&nbsp;        if (validateUserAndBook(userId, bookTitle)) {</b>
+&nbsp;
+<b class="fc">&nbsp;            Transaction transaction = transactionRepo.getTransaction(userId, bookTitle);</b>
+&nbsp;
+<b class="fc">&nbsp;            if (transaction != null) {</b>
+<b class="fc">&nbsp;                if (transaction.getRenewCount() &lt; 3) {</b>
+&nbsp;
+<b class="fc">&nbsp;                    transaction.setReturnDate(LocalDate.now());</b>
+&nbsp;
+<b class="fc">&nbsp;                    if (transaction.getExpectedReturnedDate().isBefore(transaction.getReturnDate())) {</b>
+<b class="fc">&nbsp;                        long daysLate = ChronoUnit.DAYS.between(transaction.getExpectedReturnedDate(), LocalDate.now());</b>
+<b class="fc">&nbsp;                        int amount = (int) daysLate * 10;</b>
+<b class="fc">&nbsp;                        transaction.setAmount(amount);</b>
+&nbsp;                    }
+&nbsp;
+<b class="fc">&nbsp;                    transaction.setExpectedReturnedDate(LocalDate.now().plusDays(7));</b>
+<b class="fc">&nbsp;                    transaction.setRenewCount(transaction.getRenewCount() + 1);</b>
+<b class="fc">&nbsp;                    transaction.setBookReturned(false);</b>
+&nbsp;
+<b class="fc">&nbsp;                    if (transactionRepo.updateTransaction(transaction)) {</b>
+<b class="fc">&nbsp;                        logWriter.Write(&quot;Success&quot;, &quot;TransactionManagement&quot;, &quot;Book renewed successfully!&quot;);</b>
+<b class="fc">&nbsp;                        return true;</b>
+&nbsp;                    } else {
+<b class="fc">&nbsp;                        logWriter.Write(&quot;Failure&quot;, &quot;TransactionManagement&quot;, &quot;Failed to renew book!&quot;);</b>
+&nbsp;                    }
+&nbsp;                } else {
+<b class="fc">&nbsp;                    System.out.println(&quot;More than 3 renew is allowed!&quot;);</b>
+&nbsp;                }
+&nbsp;            }
+&nbsp;            else {
+<b class="fc">&nbsp;                System.out.println(&quot;Data Not Found!&quot;);</b>
+&nbsp;            }
+&nbsp;        }
+&nbsp;
+<b class="fc">&nbsp;        return false;</b>
+&nbsp;    }
+&nbsp;
+&nbsp;    private boolean validateUserAndBook(String userId, String bookTitle) {
+&nbsp;
+<b class="fc">&nbsp;        if (userId == null || userId.isEmpty()) {</b>
+<b class="fc">&nbsp;            System.out.println(&quot;UserID is empty, Please enter valid userID!&quot;);</b>
+<b class="fc">&nbsp;            return false;</b>
+&nbsp;        }
+&nbsp;
+<b class="fc">&nbsp;        if (bookTitle == null || bookTitle.isEmpty()){</b>
+<b class="fc">&nbsp;            System.out.println(&quot;Book Title is empty, Please enter valid book title!&quot;);</b>
+<b class="fc">&nbsp;            return false;</b>
+&nbsp;        }
+&nbsp;
+<b class="fc">&nbsp;        User user = userRepo.getUser(userId);</b>
+<b class="fc">&nbsp;        Book book = bookRepo.getBook(bookTitle);</b>
+&nbsp;
+<b class="fc">&nbsp;        if (user == null) {</b>
+<b class="fc">&nbsp;            System.out.println(&quot;User Doesn&#39;t Exist!&quot;);</b>
+<b class="fc">&nbsp;            logWriter.Write(&quot;Failure&quot;, &quot;TransactionManagement&quot;, &quot;User does not exist!&quot;);</b>
+<b class="fc">&nbsp;            return false;</b>
+&nbsp;        }
+<b class="fc">&nbsp;        if (book == null) {</b>
+<b class="fc">&nbsp;            System.out.println(&quot;Book Doesn&#39;t Exist!&quot;);</b>
+<b class="fc">&nbsp;            logWriter.Write(&quot;Failure&quot;, &quot;TransactionManagement&quot;, &quot;Book does not exist!&quot;);</b>
+<b class="fc">&nbsp;            return false;</b>
+&nbsp;        }
+&nbsp;
+<b class="fc">&nbsp;        return true;</b>
+&nbsp;    }
+&nbsp;}
+</code>
+</pre>
+</div>
+
+<script type="text/javascript">
+(function() {
+    var msie = false, msie9 = false;
+    /*@cc_on
+      msie = true;
+      @if (@_jscript_version >= 9)
+        msie9 = true;
+      @end
+    @*/
+
+    if (!msie || msie && msie9) {
+      hljs.highlightAll()
+      hljs.initLineNumbersOnLoad();
+    }
+})();
+</script>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2024-05-31 16:18</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# Global options for the build
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: 'maven:3.8.5-openjdk-17'
+    entrypoint: 'bash'
+    args: [ '-c', 'mvn clean package -DskipTests' ]
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+    entrypoint: 'bash'
+    args: [ '-c', 'gcloud auth configure-docker --quiet' ]
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/cloud-428816/k8s/container2:latest', '.']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/cloud-428816/k8s/container2:latest']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud container clusters get-credentials k8s-assignment --zone us-central1-c --project cloud-428816
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        kubectl get deployment container2-deployment || kubectl apply -f deployment-container2.yaml
+        kubectl set image deployment/container2-deployment container2=us-central1-docker.pkg.dev/cloud-428816/k8s/container2:latest
+        kubectl rollout status deployment/container2-deployment
+
+images:
+  - 'us-central1-docker.pkg.dev/cloud-428816/k8s/container2:latest'

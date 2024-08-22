@@ -1,0 +1,8 @@
+services:
+  backend:
+    build: ./backend
+    image: jay411/backend
+
+  frontend:
+    build: ./frontend
+    image: jay411/frontend

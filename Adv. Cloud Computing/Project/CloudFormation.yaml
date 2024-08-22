@@ -1,0 +1,286 @@
+Parameters:
+  AWSACCESSKEY:
+    Type: String
+    Description: "AWS Access Key"
+    NoEcho: true
+  AWSSECRETKEY:
+    Type: String
+    Description: "AWS Secret Key"
+    NoEcho: true
+  AWSSESSIONTOKEN:
+    Type: String
+    Description: "AWS Session Token"
+    NoEcho: true
+  RDSMasterUsername:
+    Type: String
+    Description: "RDS Master Username"
+  RDSMasterUserPassword:
+    Type: String
+    Description: "RDS Master User Password"
+    NoEcho: true
+  SECRETMANAGERNAME:
+    Type: String
+    Description: "Secret Manager Name"
+
+
+Resources:
+  # Create a Security Group for RDS
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow MySQL access"
+      VpcId: "vpc-0350b9b453ebff139"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: "0.0.0.0/0"
+
+  # Create an RDS DB Instance
+  SlackifyRDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: "20"
+      AvailabilityZone: "us-east-1a"
+      DBInstanceIdentifier: "slackify"
+      DBName: "slackify"
+      DBInstanceClass: "db.t3.micro"
+      Engine: "mysql"
+      EngineVersion: "8.0.35"
+      MasterUsername: !Ref RDSMasterUsername
+      MasterUserPassword: !Ref RDSMasterUserPassword
+      MultiAZ: false
+      Port: "3306"
+      PubliclyAccessible: true
+      StorageEncrypted: false
+      StorageType: "gp2"
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+        
+  # Store RDS Credentials in Secrets Manager
+  RDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Ref SECRETMANAGERNAME
+      Description: "RDS Instance credentials"
+      SecretString: !Sub |
+        {
+          "username": "${RDSMasterUsername}",
+          "password": "${RDSMasterUserPassword}",
+          "engine": "mysql",
+          "host": "${SlackifyRDSInstance.Endpoint.Address}",
+          "port": "3306",
+          "dbname": "slackify"
+        }
+
+  # Create a Security Group
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH and HTTP access"
+      VpcId: "vpc-0350b9b453ebff139"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: "0.0.0.0/0"
+
+  # Create an EC2 instance
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - SlackifyRDSInstance
+      - RDSSecret
+    Properties:
+      InstanceType: "t2.micro"
+      AvailabilityZone: "us-east-1a"
+      KeyName: "Slackify"
+      ImageId: "ami-0ba9883b710b05ac6"
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: "gp2"
+      Tags:
+        - Key: "Name"
+          Value: "Slackify"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref EC2SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo su
+          sudo yum update -y
+          sudo yum install -y docker
+          sudo service docker start
+          sudo usermod -a -G docker ec2-user
+          
+          # Pull Docker image
+          docker pull jay411/slackify:cloud
+
+          # Run Docker container
+          sudo docker run -d -p 9090:9090 \
+            -e AWS_ACCESS_KEY=${AWSACCESSKEY} \
+            -e AWS_SECRET_KEY=${AWSSECRETKEY} \
+            -e AWS_SESSION_TOKEN=${AWSSESSIONTOKEN} \
+            -e SECRET_MANAGER_NAME=${SECRETMANAGERNAME} \
+            jay411/slackify:cloud
+
+
+  # Create a Lambda Function
+  LambdaConnectFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "SlackifyConnect"
+      Runtime: "java17"
+      Architectures:
+        - "x86_64"
+      Handler: "example.Hello::handleRequest"
+      Code:
+        S3Bucket: "slackify-cloud"
+        S3Key: "ConnectLambda.zip"
+      Description: "Your Lambda function description"
+      Environment:
+        Variables:
+          EC2_IP_ADDRESS: !GetAtt EC2Instance.PublicIp
+          SECRET_MANAGER_NAME: !Ref SECRETMANAGERNAME
+      Role: arn:aws:iam::650857762222:role/LabRole
+      Timeout: 200
+
+  # Create an API Gateway REST API
+  MyRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "SlackifyGateway"
+      Description: "API Gateway for Connect Lambda function"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Create a resource for /api
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt MyRestApi.RootResourceId
+      PathPart: "api"
+      RestApiId: !Ref MyRestApi
+
+  # Create a POST method for the /api resource
+  ApiPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref MyRestApi
+      Integration:
+        Credentials: arn:aws:iam::650857762222:role/LabRole
+        IntegrationHttpMethod: "POST"
+        Type: AWS
+        Uri:
+          Fn::Sub:
+            - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+            - { LambdaArn: !GetAtt LambdaConnectFunction.Arn }
+        RequestTemplates:
+          application/json: ""
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: ""
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,access-control-allow-credentials'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Credentials: true
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  # Create an OPTIONS method for the /api resource
+  ApiOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "OPTIONS"
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref MyRestApi
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  APIGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      StageName: "dev"
+      RestApiId: !Ref MyRestApi
+    DependsOn:
+      - ApiPostMethod
+      - ApiOptionsMethod
+
+  # Create a Lambda permission for API Gateway
+  LambdaApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LambdaConnectFunction.Arn
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*/POST/api"
+
+    
+Outputs:
+  RdsInstanceId:
+    Description: "Instance ID of the newly created RDS instance"
+    Value: !Ref SlackifyRDSInstance
+  RdsSecurityGroupId:
+    Description: "Security Group ID of the newly created RDS security group"
+    Value: !Ref RDSSecurityGroup
+  RDSSecretArn:
+    Description: "ARN of the RDS credentials secret"
+    Value: !Ref RDSSecret
+  EC2InstanceId:
+    Description: "Instance ID of the newly created EC2 instance"
+    Value: !Ref EC2Instance
+  EC2SecurityGroupId:
+    Description: "Security Group ID of the newly created security group"
+    Value: !Ref EC2SecurityGroup
+  EC2PublicIp:
+    Description: "Public IP address of the newly created EC2 instance"
+    Value: !GetAtt EC2Instance.PublicIp
+  LambdaFunctionArn:
+    Description: "ARN of the Lambda function"
+    Value: !GetAtt LambdaConnectFunction.Arn
+  ApiGatewayUrl:
+    Description: "URL of the API Gateway"
+    Value: !Sub "https://${MyRestApi}.execute-api.${AWS::Region}.amazonaws.com/${AWS::AccountId}/api"

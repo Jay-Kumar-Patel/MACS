@@ -1,0 +1,45 @@
+#Deployment for Container2
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: container2-deployment
+  labels:
+    app: container2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: container2
+  template:
+    metadata:
+      labels:
+        app: container2
+    spec:
+      containers:
+        - name: container2
+          image: jay411/container2:latest1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: data-volume
+              mountPath: /jay_PV_dir
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: host-pvc
+
+---
+
+# Service for Container2
+apiVersion: v1
+kind: Service
+metadata:
+  name: container2-service
+spec:
+  selector:
+    app: container2
+  ports:
+    - protocol: TCP
+      port: 90
+      targetPort: 9090

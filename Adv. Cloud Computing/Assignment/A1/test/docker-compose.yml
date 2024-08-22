@@ -1,0 +1,27 @@
+services:
+  container1:
+    build: ./container1
+    image: jay411/container1
+    container_name: container1
+    ports:
+      - "6000:6000"
+    networks:
+      - testing
+    volumes:
+      - .:/container1/data
+
+  container2:
+    build: ./container2
+    image: jay411/container2
+    container_name: container2
+    ports:
+      - "7000:7000"
+    networks:
+      - testing
+    volumes:
+      - .:/container2/data
+
+networks:
+  testing:
+    driver: bridge
+

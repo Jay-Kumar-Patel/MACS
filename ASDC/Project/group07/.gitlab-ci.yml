@@ -1,0 +1,127 @@
+stages:
+  - Build
+  - Test
+  - Publish
+  - Deploy
+
+
+Backend_Build:
+  image: maven:latest
+  stage: Build
+  tags:
+    - dalfcs_docker_autoscale
+  script:
+    - cd backend/
+    - echo "Building Backend Application..."
+    # Build Jar File
+    - mvn clean package
+    - echo "Backend Build Complete"
+    - ls -a
+  artifacts:
+    paths:
+      - backend/target
+  only:
+    - develop
+    - main
+
+
+
+Frontend_Build:
+  image: node:latest
+  stage: Build
+  tags:
+    - dalfcs_docker_autoscale
+  script:
+    - echo "Building Frontend Application..."
+    - cd frontend
+    - npm install -g pnpm
+    - pnpm i
+    # Build .next Folder
+    - pnpm build
+    - echo "Frontend Build Complete"
+    - ls -a
+  artifacts:
+    paths:
+      - frontend/.next
+  only:
+    - develop
+    - main
+
+
+Test:
+  image: maven:latest
+  stage: Test
+  tags:
+    - dalfcs_docker_autoscale
+  script:
+    - echo "Backend Testing Started..."
+    - cd backend/
+    # Run Test Cases present in test folder
+    - mvn test
+    - echo "Backend Testing Complete"
+  only:
+    - develop
+    - main
+
+Publish:
+  image: docker:20
+  stage: Publish
+  tags:
+    - dalfcs_docker_kvm
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+  services:
+    - name: docker:20-dind
+      alias: docker
+      command: [ "--tls=false" ]
+  script:
+    - echo "Publish Backend and Frontend Started..."
+    # Log in to Docker Hub
+    - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PWD docker.io
+    # Build and push the images using Docker Compose
+    - echo "Building Images..."
+    - docker-compose build
+    - echo "Push Images to Docker Hub..."
+    - docker-compose push
+    - echo "Publish Backend and Frontend Complete."
+  only:
+    - main
+
+
+Deploy_To_VM:
+  stage: Deploy
+  image: alpine:latest
+  services:
+    - name: docker:20-dind
+      alias: docker
+      command: [ "--tls=false" ]
+  tags:
+    - dalfcs_docker_autoscale
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - echo "Deploying Started..."
+    - apk update
+    - apk add openssh-client sshpass
+    # Check Docker Version
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "docker --version"
+    # Log into Docker Hub from VM
+    - echo "Login to Docker Hub..."
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "echo $VM_PWD | sudo -S docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PWD docker.io"
+    # Pull Images from Docker Hub to VM
+    - echo "Pull Backend Image..."
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "echo $VM_PWD | sudo -S docker pull jay411/backend"
+    - echo "Pull Frontend Image..."
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "echo $VM_PWD | sudo -S docker pull jay411/frontend"
+    # Run Docker images
+    - echo "Run Backend Image..."
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "echo $VM_PWD | sudo -S docker run -d -p 9090:9090 --name backend jay411/backend"
+    - echo "Run Frontend Image..."
+    - sshpass -p $VM_PWD ssh -o StrictHostKeyChecking=no student@$VM_NAME "echo $VM_PWD | sudo -S docker run -d -p 3000:3000 --name frontend jay411/frontend"
+    - echo "Deploy Completed Successfully..."
+  only:
+    - main

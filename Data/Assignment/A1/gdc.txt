@@ -1,0 +1,5 @@
+#Tweet
+jdbc:mysql://34.30.151.163:3306/SocialMedia_Jay_Sanjaybhai#root#root
+
+#User
+jdbc:mysql://35.232.53.232:3306/SocialMedia_Jay_Sanjaybhai#root#Jay@4112000

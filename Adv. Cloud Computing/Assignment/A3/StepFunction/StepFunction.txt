@@ -1,0 +1,47 @@
+{
+  "Comment": "A state machine to choose and trigger Lambda functions based on action type",
+  "StartAt": "ChooseHashFunction",
+  "States": {
+    "ChooseHashFunction": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.action",
+          "StringEquals": "sha256",
+          "Next": "InvokeSha256Lambda"
+        },
+        {
+          "Variable": "$.action",
+          "StringEquals": "md5",
+          "Next": "InvokeMd5Lambda"
+        },
+        {
+          "Variable": "$.action",
+          "StringEquals": "bcrypt",
+          "Next": "InvokeBcryptLambda"
+        }
+      ],
+      "Default": "InvalidAction"
+    },
+    "InvokeSha256Lambda": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:650857762222:function:SHA-256",
+      "End": true
+    },
+    "InvokeMd5Lambda": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:650857762222:function:MD5",
+      "End": true
+    },
+    "InvokeBcryptLambda": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:650857762222:function:Bcrypt",
+      "End": true
+    },
+    "InvalidAction": {
+      "Type": "Fail",
+      "Error": "InvalidActionError",
+      "Cause": "The action specified in the input is not valid."
+    }
+  }
+}
