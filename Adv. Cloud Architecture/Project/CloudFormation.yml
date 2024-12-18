@@ -1,0 +1,638 @@
+Parameters:
+  RDSMasterUsername:
+    Type: String
+    Description: "RDS Master Username"
+  RDSMasterUserPassword:
+    Type: String
+    Description: "RDS Master User Password"
+    NoEcho: true
+  SECRETMANAGERNAME:
+    Type: String
+    Description: "Secret Manager Name"
+
+  CloudWatchConfig:
+    Type: String
+    Default: |
+      {
+        "metrics": {
+          "namespace": "BackendMetrics",
+          "metrics_collected": {
+            "disk": {
+              "measurement": [
+                "used_percent"
+              ],
+              "metrics_collection_interval": 60
+            },
+            "mem": {
+              "measurement": [
+                "mem_used_percent"
+              ],
+              "metrics_collection_interval": 60
+            }
+          }
+        },
+        "logs": {
+          "logs_collected": {
+            "files": {
+              "collect_list": [
+                {
+                  "file_path": "/var/log/messages",
+                  "log_group_name": "EC2InstanceLogGroup",
+                  "log_stream_name": "{instance_id}-messages",
+                  "timezone": "UTC"
+                }
+              ]
+            }
+          }
+        }
+      }
+
+Resources:
+
+  roomM8vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: roomM8vpc
+
+  roomM8IG:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: roomM8IG
+
+  ConnectIG:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref roomM8vpc
+      InternetGatewayId: !Ref roomM8IG
+
+  frontendPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: frontendPublicSubnet1
+
+  frontendPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: frontendPublicSubnet2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref roomM8vpc
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref roomM8IG
+
+  frontendPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref frontendPublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  frontendPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref frontendPublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  backendPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: backendPrivateSubnet1
+
+  backendPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: backendPrivateSubnet2
+
+  backendPrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: backendPrivateSubnet3
+
+  backendPrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref roomM8vpc
+      CidrBlock: 10.0.6.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: backendPrivateSubnet4
+
+  backendPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref roomM8vpc
+      Tags:
+        - Key: Name
+          Value: backendPrivateRouteTable1
+
+  backendPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref roomM8vpc
+      Tags:
+        - Key: Name
+          Value: backendPrivateRouteTable2
+
+  backendPrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref roomM8vpc
+      Tags:
+        - Key: Name
+          Value: backendPrivateRouteTable3
+
+  backendPrivateRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref roomM8vpc
+      Tags:
+        - Key: Name
+          Value: backendPrivateRouteTable4
+
+  backendPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref backendPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref roomM8NATGateway
+
+  backendPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref backendPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref roomM8NATGateway
+
+  backendPrivateRoute3:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref backendPrivateRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref roomM8NATGateway
+
+  backendPrivateRoute4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref backendPrivateRouteTable4
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref roomM8NATGateway
+
+  roomM8ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: roomM8ElasticIP
+
+  roomM8NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt roomM8ElasticIP.AllocationId
+      SubnetId: !Ref frontendPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: roomM8NATGateway
+
+  backendPrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref backendPrivateSubnet1
+      RouteTableId: !Ref backendPrivateRouteTable1
+
+  backendPrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref backendPrivateSubnet2
+      RouteTableId: !Ref backendPrivateRouteTable2
+
+  backendPrivateSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref backendPrivateSubnet3
+      RouteTableId: !Ref backendPrivateRouteTable3
+
+  backendPrivateSubnetRouteTableAssociation4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref backendPrivateSubnet4
+      RouteTableId: !Ref backendPrivateRouteTable4
+
+  FrontendSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and HTTPS access for Frontend
+      VpcId: !Ref roomM8vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: FrontendSG
+
+  BackendSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access from Frontend to Backend
+      VpcId: !Ref roomM8vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          SourceSecurityGroupId: !Ref BackendLoadBalanceSG
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref FrontendSG
+      Tags:
+        - Key: Name
+          Value: BackendSG
+
+  DatabaseSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access from Backend to Database
+      VpcId: !Ref roomM8vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref BackendSG
+      Tags:
+        - Key: Name
+          Value: DatabaseSG
+
+  roomM8RDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: 8.0.35
+      DBInstanceIdentifier: roomM8DBInstance
+      MasterUsername: admin
+      MasterUserPassword: jayspatel
+      DBName: room8database
+      VPCSecurityGroups:
+        - !Ref DatabaseSG
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      MultiAZ: true
+      Port: 3306
+      AllocatedStorage: 20
+      StorageType: gp2
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS in Private Subnet 1 and Private Subnet 2
+      SubnetIds:
+        - !Ref backendPrivateSubnet1
+        - !Ref backendPrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: RDSSubnetGroup
+
+  RDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Ref SECRETMANAGERNAME
+      Description: "RDS Instance credentials"
+      SecretString: !Sub |
+        {
+          "username": "${RDSMasterUsername}",
+          "password": "${RDSMasterUserPassword}",
+          "engine": "mysql",
+          "host": "${roomM8RDS.Endpoint.Address}",
+          "port": "3306",
+          "dbname": "room8database"
+        }
+
+  BackendLoadBalanceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Backend Load Balancer
+      VpcId: !Ref roomM8vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: BackendLoadBalanceSG
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Protocol: HTTP
+      Port: 9090
+      VpcId: !Ref roomM8vpc
+      TargetType: instance
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 9090
+      HealthCheckPath: /
+      Tags:
+        - Key: Name
+          Value: BackendTargetGroup
+
+  BackendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref BackendLoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  BackendLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: roomM8BackendLoadBalancer
+      Subnets:
+        - Ref: frontendPublicSubnet1
+        - Ref: frontendPublicSubnet2
+      SecurityGroups:
+        - Ref: BackendLoadBalanceSG
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: 60
+      Tags:
+        - Key: Name
+          Value: BackendLoadBalancer
+
+  roomM8FrontendInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - BackendListener
+      - BackendLoadBalancer
+      - MyRestApi
+    Properties:
+      InstanceType: t2.medium
+      KeyName: roomM8
+      SubnetId: !Ref frontendPublicSubnet1
+      SecurityGroupIds:
+        - !Ref FrontendSG
+      ImageId: ami-0ba9883b710b05ac6
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Update packages
+          sudo yum update -y
+
+          sudo yum install -y amazon-cloudwatch-agent
+
+          sudo bash -c 'cat <<EOF > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+          ${CloudWatchConfig}
+          EOF'
+          sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+
+          # Install Docker
+          sudo yum install -y docker
+          sudo service docker start
+
+          # Pull Frontend Image from DockerHub
+          sudo docker pull jay411/frontend:final
+
+          # Run the container
+          sudo docker run -d -p 3000:3000 \
+            -e NEXT_PUBLIC_API_BASE_URL=http://${BackendLoadBalancer.DNSName} \
+            -e NEXT_PUBLIC_API_GATEWAY_URL=https://${MyRestApi}.execute-api.${AWS::Region}.amazonaws.com/dev/sns \
+            jay411/frontend:final
+      Tags:
+        - Key: Name
+          Value: roomM8FrontendInstance
+
+  roomM8BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: roomM8BackendLaunchTemplate
+      LaunchTemplateData:
+        InstanceType: t2.medium
+        KeyName: roomM8
+        ImageId: ami-0ba9883b710b05ac6
+        SecurityGroupIds:
+          - !Ref BackendSG
+        UserData: 
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # Update packages
+            sudo yum update -y
+
+            sudo yum install -y amazon-cloudwatch-agent
+
+            sudo bash -c 'cat <<EOF > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+            ${CloudWatchConfig}
+            EOF'
+            sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+
+            # Install Docker
+            sudo yum install -y docker
+            sudo service docker start
+
+            # Pull Backend Image from DockerHub
+            sudo docker pull jay411/backend:test
+
+            # Run the container
+            sudo docker run -d -p 9090:9090 \
+              -e DB_HOST=${roomM8RDS.Endpoint.Address} \
+              -e DB_USER=admin \
+              -e DB_PASSWORD=jayspatel \
+              jay411/backend:test
+
+  roomM8BackendASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - roomM8BackendLaunchTemplate
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref roomM8BackendLaunchTemplate
+        Version: !GetAtt roomM8BackendLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 5
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - !Ref backendPrivateSubnet3
+        - !Ref backendPrivateSubnet4
+      TargetGroupARNs:
+        - !Ref BackendTargetGroup
+      Tags:
+        - Key: Name
+          Value: roomM8BackendInstance
+          PropagateAtLaunch: true
+
+  MyCustomLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: MyCustomLayer
+      Content:
+        S3Bucket: "snscode"
+        S3Key: "aws-sdk.zip"
+      CompatibleRuntimes:
+        - nodejs22.x
+
+
+  LambdaConnectFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "SNS"
+      Runtime: "nodejs22.x"
+      Architectures:
+        - "x86_64"
+      Handler: "index.handler"
+      Code:
+        S3Bucket: "snscode"
+        S3Key: "SNSLambdaCode.zip"
+      Description: "SNS Lambda"
+      Role: "arn:aws:iam::533267426665:role/LabRole"
+      Timeout: 200
+      Layers:
+        - !Ref MyCustomLayer
+
+  MyRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "RoomM8APIGateway"
+      Description: "API Gateway for SNS Lambda"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt MyRestApi.RootResourceId
+      PathPart: "sns"
+      RestApiId: !Ref MyRestApi
+
+  ApiPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref MyRestApi
+      Integration:
+        Credentials: "arn:aws:iam::533267426665:role/LabRole"
+        IntegrationHttpMethod: "POST"
+        Type: AWS
+        Uri:
+          Fn::Sub:
+            - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+            - { LambdaArn: !GetAtt LambdaConnectFunction.Arn }
+        RequestTemplates:
+          application/json: ""
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: ""
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,access-control-allow-credentials'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS,DELETE'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Credentials: true
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  ApiOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "OPTIONS"
+      ResourceId: !Ref ApiResource
+      RestApiId: !Ref MyRestApi
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: "Empty"
+
+  APIGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    Properties:
+      StageName: "dev"
+      RestApiId: !Ref MyRestApi
+    DependsOn:
+      - ApiPostMethod
+      - ApiOptionsMethod
+
+  LambdaApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LambdaConnectFunction.Arn
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyRestApi}/*/POST/sns"
